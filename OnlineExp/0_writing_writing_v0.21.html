@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <script src="./jspsych.js"></script>
+    <script src="./plugins/plugin-survey-html-form.js"></script>
+    <script src="./plugins/plugin-html-keyboard-response.js"></script>
+    <script src="./plugins/plugin-html-button-response.js"></script>
+    <script src="./plugins/plugin-survey-text.js"></script>
+    <script src="./plugins/plugin-fullscreen.js"></script>
+    <script src="./plugins/plugin-survey-likert.js"></script>
+    <script src="http://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.4.1.min.js"></script>
+    <link rel="stylesheet" href="./css/jspsych.css" />
+  </head>
+  <body></body>
+  <script>
+
+// ----このプログラムについて-----
+// 本プログラムは執筆課題デモである
+
+//別途保存するデータ
+let writingLogLst = [];//(辞書のリスト; あとでJSONにする)
+let json_string;//上記をparseしてJSON文字列にする
+let minLength = 200;// 最小文字数
+let maxLength = 600;// 最大文字数
+
+//参加者に改めて見せる用のデータ
+let trial_text;
+
+//現在のテキストの直前のテキスト（文字列比較用）を宣言
+let previous_text_length;
+
+var trial_labels = [
+  "全く当てはまらない",
+  "当てはまらない",
+  "あまりあてはまらない",
+  "どちらともいえない",
+  "やや当てはまる",
+  "当てはまる",
+  "非常に当てはまる"
+];
+
+jsPsych = initJsPsych({
+  on_finish: () => {
+    //ローカルでの確認用
+    jsPsych.data.displayData();
+  },
+});
+
+
+//実験開始時間の記録
+const ex_start_time = new Date();
+const ex_start_time_text = ex_start_time.getFullYear()+"/"+(ex_start_time.getMonth()+1)+"/"+ex_start_time.getDate()+ " "+ ex_start_time.getHours()+":"+("0" + ex_start_time.getMinutes()).slice(-2)+":"+("0" + ex_start_time.getSeconds()).slice(-2);
+jsPsych.data.addProperties({"StartTime":ex_start_time_text});//参加者情報に格納
+
+//実験画面を全画面表示にする
+//フルスクリーンで実験を始める
+const FullScreen = {
+    type: jsPsychFullscreen,
+    fullscreen_mode: true,
+    message:"これから実験を始めます。実験はフルスクリーンで行われます。<br>"+
+    "（フルスクリーン非対応ブラウザの場合を除く）<br>"+
+    "*なお、実験を途中でやめる場合は、Escキーを押すことでフルスクリーンを解除することができます。<br><br>"+
+    "「次へ」ボタンを押すと次に進みます。<br><br>",
+    button_label:"次へ",
+    delay_after:1000
+};
+
+const instruction = {
+    type: jsPsychSurveyHtmlForm,
+    html:
+        "<p style='text-align:left'>この課題では、次の画面上部に呈示される条件についての文章を書いていただきます。<br></p>" +
+        "<p style='text-align:left'><br>※休憩を取る場合は、この画面で休憩を取っていただきますようお願いいたします。</p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>以上の教示を理解したら「本番へ進む」ボタンを押して、課題を始めてください。</p>",
+    button_label: "本番へ進む",
+    data: { task: 'writing_instruction'},
+};
+
+
+//keyupに反応して文字列を保存する
+//ref: https://feeld-uni.com/?p=2244#google_vignette
+var writing_trial = {
+  type: jsPsychSurveyHtmlForm,
+  preamble:
+  "<p style='text-align:left'>以下の空欄に、<u>子ども達の学力向上のために教師ができることはどのようなことか</u>を説明する文章を書いてください。</p>" +
+  "<p style='text-align:left'>ただし、以下の点に留意ください</p>" + 
+  "<ul style='text-align:left'>" +
+    "<li>メモ書きや下書きは禁止。</li>" +
+    "<li>わかりやすい文章を書く（誤字・脱字がない、平易な文章、構成が掴みやすい文章; 箇条書きは禁止）</li>" +
+    "<li>文字数制限は200字以上600字以内</li>" +
+  "</ul>",
+  html:
+  "<p><textarea cols='150' rows='5' id='textarea_1'></textarea></p>" + 
+  "<p id='inputlength'>0文字</p>",
+  button_label: '次へ',
+
+  on_load: function(data){
+    //開幕でボタンを使えなくする
+    document.getElementById("jspsych-survey-html-form-next").setAttribute("disabled", true);    
+
+    //inputが起きたときにサーバに文字数を保存
+    //ref1: https://feeld-uni.com/?p=2244#google_vignette
+    //ref2: https://tsuchippo.com/programming-wordcount
+    let textarea = document.querySelector('textarea');
+
+    textarea.addEventListener('input', () => {
+      //文字数が直前のテキストと比較して、変化していたら
+      //サーバにデータを保存する
+      if(textarea.value.length != previous_text_length){
+        //現在時刻、刺激、音声反応の読み取り
+        var cwid = queries["cwid"];
+        var current_time = new Date();
+        var current_text = textarea.value;
+
+        //writingLogLstに出力する
+        writingLogLst.push({
+          cwid: cwid,
+          time: current_time,
+          text: current_text,
+        });
+
+        //JSON文字列に変換する
+        //ref: https://x-tech.pasona.co.jp/media/detail.html?p=2410
+        json_string = JSON.stringify(writingLogLst);
+
+        //writingLogLstを空に
+        writingLogLst = [];
+
+        //previous_text_lengthを更新
+        previous_text_length = textarea.value.length
+      }
+    }, false);
+
+    //文字数の表示に関するイベント入れる
+    textarea.addEventListener('input', () =>{
+      if(textarea.value.length < minLength){
+        document.getElementById("inputlength").innerHTML = textarea.value.length + "文字（文字数が足りません）";
+        document.getElementById("jspsych-survey-html-form-next").setAttribute("disabled", true);
+      }
+      else if(textarea.value.length >= minLength && textarea.value.length <= maxLength){
+        document.getElementById("inputlength").innerHTML = textarea.value.length + "文字";
+        document.getElementById("jspsych-survey-html-form-next").removeAttribute("disabled");
+      }
+      else{
+        document.getElementById("inputlength").innerHTML = textarea.value.length + "文字（文字数が多いです）";
+        document.getElementById("jspsych-survey-html-form-next").setAttribute("disabled", true);
+      }
+
+      //常に最新の文字列は裏で持っておく
+      trial_text = textarea.value;
+    }, false);
+  },
+
+  on_finish: function(data){
+    //最新の文字列を保存する。
+    data.trial_text = trial_text;
+  }
+}
+
+//Likert法で内容に対する評定を得る
+//ref: https://www.jspsych.org/7.3/plugins/survey-likert/
+var likert_trial = {
+  type: jsPsychSurveyLikert,
+  preamble:
+  "<p style='text-align:left'>以下には、先ほど書いていただいた文章を呈示しています。</p>" +
+  "<p style='text-align:left'>以下の文章について、以下に呈示する3つの観点から自己採点をしてください。</p>" + 
+  "<p stype='text-align:left'>それぞれの項目について「全く当てはまらない」 ~ 「非常に当てはまる」</p>" + 
+  "<p><textarea readonly cols='150' rows='5' id='textarea_1'></textarea></p>",
+  questions:[
+    {
+      prompt: "誤字・脱字が少ない",
+      name: "mistake",
+      labels: trial_labels,
+      required: true,
+    },
+    {
+      prompt: "構成が掴みやすい",
+      name: "composition",
+      labels: trial_labels,
+      required: true,
+    },
+    {
+      prompt: "文章は平易だ",
+      name: "ease",
+      labels: trial_labels,
+      required: true,
+    },
+  ],
+  button_label: '次へ',
+
+  on_load: function(data){
+    //最新の文字列を反映する
+    let textarea = document.querySelector('textarea');
+      textarea.value = trial_text;
+  },
+
+  on_finish: function(data){
+    //最新の文字列を保存する。
+    data.mistake = jsPsych.data.get().last().trials[0].response.mistake;
+    data.composition = jsPsych.data.get().last().trials[0].response.composition;
+    data.ease = jsPsych.data.get().last().trials[0].response.ease;
+  }
+}
+
+// デブリーフィング
+const debrief = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus:
+            "<p style='text-algin:left'>これで実験は終了です。お疲れ様でした。</p>" +
+            "<p style='text-algin:left'>スペースキーを押して、次の画面を閉じてください。</p>",
+    choices: [' '],
+    data: { task: 'wmc_debrief' },
+
+    on_finish:function(data){
+        //実験が終わった時間
+        const ex_finish_time = new Date();
+        const ex_finish_time_text = ex_finish_time.getFullYear()+"/"+(ex_finish_time.getMonth()+1)+"/"+ex_finish_time.getDate()+ " "+ ex_finish_time.getHours()+":"+("0" + ex_finish_time.getMinutes()).slice(-2)+":"+("0" + ex_finish_time.getSeconds()).slice(-2);
+        jsPsych.data.addProperties({"EndTime":ex_finish_time_text});//参加者情報に格納
+    }
+};
+
+jsPsych.run([
+  FullScreen, instruction,
+  writing_trial,
+  likert_trial,
+  debrief
+]);
+
+  </script>
+</html>

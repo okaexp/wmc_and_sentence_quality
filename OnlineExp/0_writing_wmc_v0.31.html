@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <script src="./jspsych.js"></script>
+    <script src="./plugins/plugin-html-keyboard-response.js"></script>
+    <script src="./plugins/plugin-survey-text.js"></script>
+    <script src="./plugins/plugin-fullscreen.js"></script>
+    <script src="./plugins/plugin-initialize-microphone.js"></script>
+    <script src="./plugins/plugin-html-audio-response.js"></script>
+    <script src="./plugins/plugin-survey-html-form.js"></script>
+    <script src="http://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.4.1.min.js"></script>
+    <script src="./stimulus/stimulus_rst_main.js"></script>
+    <script src="./stimulus/stimulus_rst_practice.js"></script>
+    <link rel="stylesheet" href="./css/jspsych.css" />
+  </head>
+  <body></body>
+  <script>
+
+// ----このプログラムについて-----
+// 本プログラムはRSTの測定のための練習試行までをまとめたデモである
+// 実際の刺激は苧阪 (2002)の書籍をもとに、自身で収集してください
+
+// -----別途保存するデータ-----
+let wmcVoiceAloudTrialLst = [];//(辞書のリスト; あとでJSONにする)
+let json_string;//上記をparseしてJSON文字列にする
+let practice_audio_url_1;
+let practice_audio_url_2;
+let practice_audio_obj_1;
+let practice_audio_obj_2;
+
+let current_trial_nubmer;
+
+// -----試行を生成する関数群-----
+// voice_aloud試行: 本番
+const createVoiceAloudTrial = (setting) => {
+    const trial = {
+        type: jsPsychHtmlAudioResponse,
+        stimulus: `${setting.stim}`,
+        recording_duration: 15000,
+        done_button_label: "次へ",
+        data: {
+            task: 'wmc_audio_trial',
+            target_word: `${setting.target_word}`,
+            trial_id: `${setting.trial_id}`,
+            trial_kind: `${setting.trial_kind}`,
+        },
+
+        on_load: (data) => {
+            //enterkeyの無効化
+            //ref: https://tutorial.eyehunts.com/js/disable-enter-key-on-an-input-field-in-javascript-example-code/
+            document.addEventListener('keypress', function (e) {
+                if (e.keyCode === 13 || e.which === 13) {
+                    e.preventDefault();
+                    return false;
+                }
+            });
+
+            //focusがボタンに当たっていると、enterキーで進んでしまうため、外す
+            const focused_elem = document.activeElement;
+            focused_elem.blur();
+        },
+
+        on_finish: (data) => {
+            //現在時刻、刺激、音声反応の読み取り
+            var ID = "test";
+            var current_time = new Date();
+            var current_time_elapsed = jsPsych.data.get().last().trials[0].time_elapsed
+            var current_rt = jsPsych.data.get().last().trials[0].rt
+            var current_target_word = `${setting.target_word}`;
+            var current_trial_id = `${setting.trial_id}`;
+            var current_audio_response = jsPsych.data.get().last().trials[0].response;
+
+            //wmcVoiceAloudTrialLstに出力
+            wmcVoiceAloudTrialLst.push({
+                ID: ID,
+                time: current_time,
+                time_elapsed: current_time_elapsed,
+                rt: current_rt,
+                target_word: current_target_word,
+                trial_id: current_trial_id,
+                audio_response: current_audio_response
+            });
+
+            //JSON文字列に変換する
+            //ref: https://x-tech.pasona.co.jp/media/detail.html?p=2410
+            json_string = JSON.stringify(wmcVoiceAloudTrialLst);
+
+            //変数の初期化
+            wmcVoiceAloudTrialLst = [];
+            json_string = "";
+            jsPsych.data.get().last().trials[0].response = "";
+        },
+    };
+    return trial;
+};
+
+// answer_target_word試行: 本番
+// ref:https://github.com/janakl4us/workingmemory/blob/master/english/reading_span_web_english.html
+const createAnswerTaregtWordTrial = (setting) => {
+    const trial = {
+        type: jsPsychSurveyText,
+        preamble: "<div style='margin-top: 20%'>下線を引いた単語を書き出してください。最後に聞いた単語から書き出すのは禁止です。</div>",
+        button_label: "次へ",
+        questions: [
+            {prompt: "", name: `resp1`},
+            {prompt: "", name: `resp2`},
+            {prompt: "", name: `resp3`},
+            {prompt: "", name: `resp4`},
+            {prompt: "", name: `resp5`},
+        ],
+        data:{
+            task: 'wmc_answer_target_word',
+            trial_id: `${setting.trial_id}`,
+            trial_kind: `${setting.trial_kind}`,
+        },
+
+        on_load: (data) => {
+            //enterkeyの無効化
+            //ref: https://tutorial.eyehunts.com/js/disable-enter-key-on-an-input-field-in-javascript-example-code/
+            document.addEventListener('keypress', function (e) {
+                if (e.keyCode === 13 || e.which === 13) {
+                    e.preventDefault();
+                    return false;
+                }
+            });
+
+            //focusがボタンに当たっていると、enterキーで進んでしまうため、外す
+            const focused_elem = document.activeElement;
+            focused_elem.blur();
+
+            //20231217: 追記
+            //trial数に応じて回答欄を削除
+
+            //trial数を引っ張り出す
+            //trial_kindの先頭文字で決める
+            current_trial_nubmer  = setting.trial_id.slice(0, 1);
+
+            if (current_trial_nubmer == "2"){
+                //trial_idが2なら、input-2,3,4は削除する
+                document.getElementById('input-2').style.visibility = "hidden";
+                document.getElementById("input-2").setAttribute("disabled", true);
+                document.getElementById('input-3').style.visibility = "hidden";
+                document.getElementById("input-3").setAttribute("disabled", true);
+                document.getElementById('input-4').style.visibility = "hidden";
+                document.getElementById("input-4").setAttribute("disabled", true);
+            }
+            else if (current_trial_nubmer == "3"){
+                //trial_idが3なら、input-3,4は削除する
+                document.getElementById('input-3').style.visibility = "hidden";
+                document.getElementById("input-3").setAttribute("disabled", true);
+                document.getElementById('input-4').style.visibility = "hidden";
+                document.getElementById("input-4").setAttribute("disabled", true);
+            }
+            else if (current_trial_nubmer == "4"){
+                //trial_idが4なら、input-4は削除する
+                document.getElementById('input-4').style.visibility = "hidden";
+                document.getElementById("input-4").setAttribute("disabled", true);
+            }
+            else {
+                //なにもしない
+            }
+        },
+
+        on_finish: (data) => {
+            //jsPsych.dataまわりの保存
+            data.resp1 = jsPsych.data.get().last(1).values()[0].response.resp1;
+            data.resp2 = jsPsych.data.get().last(1).values()[0].response.resp2;
+            data.resp3 = jsPsych.data.get().last(1).values()[0].response.resp3;
+            data.resp4 = jsPsych.data.get().last(1).values()[0].response.resp4;
+            data.resp5 = jsPsych.data.get().last(1).values()[0].response.resp5;
+        },
+    };
+    return trial;
+};
+
+// settingを引数として、voice_aloud_trialか、answer_target_word_trialを吐く関数
+const createTrial = (setting) => {
+    if (setting.trial_kind == `voice_aloud`){
+        return createVoiceAloudTrial(setting);
+    } else {
+        return createAnswerTaregtWordTrial(setting);
+    }
+}
+
+const jsPsych = initJsPsych({
+    on_finish: () => {
+        //ローカルでの確認用
+        jsPsych.data.displayData();
+    },
+}); // <-- 波括弧を忘れない！ 括弧の始まりにも！
+
+
+//実験開始時間の記録
+const ex_start_time = new Date();
+const ex_start_time_text = ex_start_time.getFullYear()+"/"+(ex_start_time.getMonth()+1)+"/"+ex_start_time.getDate()+ " "+ ex_start_time.getHours()+":"+("0" + ex_start_time.getMinutes()).slice(-2)+":"+("0" + ex_start_time.getSeconds()).slice(-2);
+jsPsych.data.addProperties({"StartTime":ex_start_time_text});//参加者情報に格納
+
+//実験画面を全画面表示にする
+//フルスクリーンで実験を始める
+const FullScreen = {
+    type: jsPsychFullscreen,
+    fullscreen_mode: true,
+    message:"これから実験を始めます。実験はフルスクリーンで行われます。<br>"+
+    "（フルスクリーン非対応ブラウザの場合を除く）<br>"+
+    "*なお、実験を途中でやめる場合は、Escキーを押すことでフルスクリーンを解除することができます。<br><br>"+
+    "「次へ」ボタンを押すと次に進みます。<br><br>",
+    button_label:"次へ",
+    delay_after:1000
+};
+
+//マイクの初期化
+var init_mic = {
+    type: jsPsychInitializeMicrophone,
+    device_select_message:
+        "<p>この実験ではマイク音声を利用します。どのマイクを利用するかをプルダウンから選択してください。</p>" +
+        "<p>※ノートPCなどを利用している場合、「Internal Microhphone (Built-In)」」が表示されていると思います。</p>" +
+        "<p>※複数のマイクを指している場合、わかりやすいように一つのマイクのみを残して実験にご参加ください。</p>",
+    button_label: "このマイクを使う",
+};
+
+const instruction_0 = {
+    type: jsPsychSurveyHtmlForm,
+    html:
+        "<p style='text-align:left'>この課題では、<b>画面に呈示された文を音読する課題</b>と<b>呈示された単語を回答する課題</b>の2つを交互に繰り返していただきます。<br></p>" +
+        "<p style='text-align:left'><br>次のページでは、<b>画面に呈示された文を音読する課題</b>について説明します。</p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'><br>※休憩を取る場合は、この画面で休憩を取っていただきますようお願いいたします。</p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>以上の教示を理解したら「次へ」ボタンを押して、教示の続きを読んでください。</p>",
+    button_label: "次へ",
+    data: { task: 'wcm_instruction'},
+};
+
+const instruction_1a = {
+    type: jsPsychSurveyHtmlForm,
+    html:
+        "<p style='text-align:left'><b>画面に呈示された文を音読する課題</b>では、コンピュータ画面に現れる文を音読してもらいます。1画面に一つの文が書いてあります。<br></p>" +
+        "<p style='text-align:left'>意味を理解しながら、<b>声に出して読んでください。</b>自分の読みやすい速さで読んでください。<br></p>" +
+        "<p style='text-align:left'>わざと読み方を遅くしたり、文の途中で長く休んだりしてはいけません。子供に話して聴かせるつもりで、はっきりと自然な調子で読んでください。<br></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>画面に呈示された文を読み終えたら、画面下にある「次へ」ボタンを押してください。<br></p>" +
+        "<p style='text-align:left'>画面が変わります。次の画面の文を、同じように、すぐ読み始めてください。<br></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>以上の教示を理解したら「具体例に進む」ボタンを押してください。画面に呈示された文を音読する課題の具体例を示します。</p>" +
+        "<p style='text-align:left'><b>練習のため、実際に画面に呈示された文を声に出して読んでください</b>。</p>",
+    button_label: "具体例に進む",
+    data: { task: 'wcm_instruction'},
+};
+
+const instruction_1b = {
+    type: jsPsychHtmlAudioResponse,
+    stimulus: `<p style=\"font-size:28px;\">私は太郎との<u>時間</u>を楽しんだ。</p>`,
+    done_button_label: "具体例を進める",
+    recording_duration: 15000,
+    data: { task: 'wcm_instruction'},
+    save_audio_url: true,
+
+    on_finish: (data) => {
+        //音声反応の読み取り
+        practice_audio_url_1 = jsPsych.data.get().last().trials[0].audio_url;
+        practice_audio_obj_1 = new Audio(practice_audio_url_1);
+     
+        //jsPsych.dataのtrialから現在の音声情報を削除
+        jsPsych.data.get().last().trials[0].response = "";
+    },
+};
+
+const instruction_1c = {
+    type: jsPsychHtmlAudioResponse,
+    stimulus: `<p style=\"font-size:28px;\">科学者の仕事は、新しい事実を<u>発見する</u>ことだ。</p>`,
+    done_button_label: "具体例を進める",
+    recording_duration: 15000,
+    data: { task: 'wcm_instruction'},
+    save_audio_url: true,
+
+    on_finish: (data) => {
+        //音声反応の読み取り
+        practice_audio_url_2 = jsPsych.data.get().last().trials[0].audio_url;
+        practice_audio_obj_2 = new Audio(practice_audio_url_2);
+
+        //jsPsych.dataのtrialから現在の音声情報を削除
+        jsPsych.data.get().last().trials[0].response = "";
+    },
+};
+
+const instruction_1d = {
+    type: jsPsychSurveyHtmlForm,
+    html:
+        "<p style='text-align:left'>実験では、最初に設定したマイクであなたの音声を録音します。<br></p>" +
+        "<p style='text-align:left'>以下のそれぞれのボタンを押すことで、さきほどあなたが読み上げた音声が流れます</p>" +
+        "<p><button type='button' id='practice_button_1'>1文目の音声</button></p>" + 
+        "<p><button type='button' id='practice_button_2'>2文目の音声</button></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>明瞭に自分の声が聞こえるか、マイクが音声を拾っているかを改めて確認してください。</p>" +
+        "<p style='text-align:left'>※もし音声が拾えていない場合、お手数ですが、画面をescapeキーなどで最大化を解き、ブラウザの更新ボタンを一度押して、あらためて実験にご参加ください。</p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>マイクや音声の問題がなければ、「次へ」ボタンを押して、<b>呈示された単語を回答する課題</b>の説明を読んでください。</p>",
+    button_label: "次へ",
+    data: { task: 'wcm_instruction'},
+
+    //on_loadじゃないと反応しない
+    on_load: (data) => {
+        //onclick属性をbuttonに付与
+        //pauseやcurrentTimeが悪さをして、再生していないように見えた
+        document.getElementById('practice_button_1').onclick = function() {
+            practice_audio_obj_1.currentTime = 0;//巻き戻し
+            practice_audio_obj_1.play();// 再生
+        };
+        document.getElementById('practice_button_2').onclick = function() {
+            practice_audio_obj_2.currentTime = 0;//巻き戻し
+            practice_audio_obj_2.play();// 再生
+        };
+    },
+
+    //本番に不要なデータを全て削除する
+    on_finish: (data) => {
+        delete practice_audio_obj_1;
+        delete practice_audio_obj_2;
+        delete practice_audio_url_1;
+        delete practice_audio_url_2;
+    },
+};
+
+const instruction_2a = {
+    type: jsPsychSurveyHtmlForm,
+    html:
+        "<p style='text-align:left'><b>呈示された単語を回答する課題</b>では、「下線を引いた単語を書き出してください。最後に聞いた単語から書き出すのは禁止です。」という文が書かれた画面が現れます。<br></p>" +
+        "<p style='text-align:left'>ここでは、それまでに読んだ文の中で<u>下線</u>が引いてあった単語をできるだけ多く思い出して、回答欄に入力してください。<br></p>" +
+        "<p style='text-align:left'>読んだ文の順番どおりに思い出せなくてもかまいません。思い出すことのできた単語から入力してください。<br></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>ただし、直前に呈示された単語を最初に入力してはいけません。<br></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>思い出せる単語を全部回答したら、画面下にある「次へ」ボタンを押してください。<br></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>以上の教示を理解したら「次へ」ボタンを押してください。さきほど読み上げた文章をもとに<b>呈示された単語を回答する課題</b>の具体例に進みます。</p>",
+    button_label: "具体例に進む",
+    data: { task: 'wcm_instruction'},
+};
+
+const exampleTrialSetting = [
+    {
+        "trial_id": "2_example_a",
+        "trial_kind": "answer_target_word"
+    }
+]
+const example_answer_trial = exampleTrialSetting.map((s) => createTrial(s));
+const instruction_2b = {timeline: example_answer_trial};
+
+const instruction_2c = {
+    type: jsPsychSurveyHtmlForm,
+    html:
+        "<p style='text-align:left'>先ほど読み上げた文章で下線が引かれた単語は<u>時間</u>と<u>発見する</u>でした。<br></p>" +
+        "<p style='text-align:left'>したがって、回答欄に、「時間」と「発見する」をそれぞれ回答した場合に正解となります。<br></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>繰り返しになりますが、直前に呈示された単語（先の例の場合、発見する）を最初に入力してはいけません。<br></p>" +
+        "<p style='text-align:left'>また、画面に呈示された文を音読する課題おいて、わざと読み方を遅くしたり、文の途中で長く休んだりしてはいけません。<br></p>" +
+        "<p style='text-align:left'>子供に話して聴かせるつもりで、はっきりと自然な調子で、声に出して読んでください。<br></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>以上の教示を理解したら「次へ」ボタンを押してください。</p>" +
+        "<p style='text-align:left'>本番と同様の練習として、次の画面から表示される文を、さきほどと同じように、声に出してすぐに読み始めてください。。</p>",
+    button_label: "練習に進む",
+    data: { task: 'wcm_instruction'},
+};
+
+// 練習
+const practice_trials = practiceTrialSettings.map((s) => createTrial(s));
+const practice_trials_tl = {timeline: practice_trials};
+
+const instruction_3 = {
+    type: jsPsychSurveyHtmlForm,
+    html:
+        "<p style='text-align:left'>先ほど読み上げた文章で下線が引かれた単語は<u>母</u>と<u>ぶっきらぼう</u>でした。<br></p>" +
+        "<p style='text-align:left'>したがって、回答欄に、「母」と「ぶっきらぼう」をそれぞれ回答した場合に正解となります。<br></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'>繰り返しになりますが、直前に呈示された単語（先の例の場合、ぶっきらぼう）を最初に入力してはいけません。<br></p>" +
+        "<p style='text-align:left'>また、<b>画面に呈示された文を音読する課題</b>において、わざと読み方を遅くしたり、文の途中で長く休んだりしてはいけません。<br></p>" +
+        "<p style='text-align:left'><b>画面に呈示された文を音読する課題</b>では、子供に話して聴かせるつもりで、はっきりと自然な調子で声に出して読んでください。<br></p>" +
+        "<p><br><br></p>" +
+        "<p style='text-align:left'><b>謝金の支払いの確認として、それぞれの文を読み上げているか確認するので、必ずすべての文について音読するようにしてください。</b><br></p>" +
+        "<p><br><br></p>" +        
+        "<p style='text-align:left'>以上の教示を理解したら「次へ」ボタンを押してください。</p>" +
+        "<p style='text-align:left'>本番が始まります。</p>",
+    button_label: "本番に進む",
+    data: { task: 'wcm_instruction'},
+};
+
+// デブリーフィング
+const debrief = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus:
+            "<p style='text-algin:left'>これで実験は終了です。お疲れ様でした。</p>" +
+            "<p style='text-algin:left'>スペースキーを押して、次の画面を閉じてください。</p>",
+    choices: [' '],
+    data: { task: 'wmc_debrief' },
+
+    on_finish:function(data){
+        //実験が終わった時間
+        const ex_finish_time = new Date();
+        const ex_finish_time_text = ex_finish_time.getFullYear()+"/"+(ex_finish_time.getMonth()+1)+"/"+ex_finish_time.getDate()+ " "+ ex_finish_time.getHours()+":"+("0" + ex_finish_time.getMinutes()).slice(-2)+":"+("0" + ex_finish_time.getSeconds()).slice(-2);
+        jsPsych.data.addProperties({"EndTime":ex_finish_time_text});//参加者情報に格納
+    }
+};
+
+//timelineでいい感じにする。
+jsPsych.run([
+    FullScreen, init_mic, instruction_0,
+    instruction_1a, instruction_1b, instruction_1c, instruction_1d,
+    instruction_2a, instruction_2b, instruction_2c,
+    practice_trials_tl,
+    instruction_3,
+    debrief]
+);
+  </script>
+</html>
